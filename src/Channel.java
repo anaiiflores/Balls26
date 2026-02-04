@@ -2,12 +2,11 @@
 import java.io.*;
 import java.net.Socket;
 import java.util.function.Consumer;
-
+//se envian objetos de tipo frame, 2 tipos de comunicainoes y el de arriba, framecom, frame es app...
 public class Channel {
     private final Socket socket;
     private final ObjectOutputStream out;
     private final ObjectInputStream in;
-
     private volatile boolean running = true;
 
     public Channel(Socket socket) throws IOException {

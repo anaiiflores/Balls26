@@ -33,5 +33,7 @@ public class MainSC {
 
             new Thread(new GameController(model, view, net), "GameLoop").start();
         });
+        model.spawnTest(800, 500);
+
     }
 }

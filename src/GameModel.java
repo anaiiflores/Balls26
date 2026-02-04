@@ -28,6 +28,10 @@ public class GameModel {
     { return new Animation(boomSheet, 64, 64, 6, 180); }
 
     public void update(long dtMs, int w, int h) {
+        if (spawningEnabled) {
+            System.out.println("[MODEL] spawningEnabled=true walkers=" + walkers.size());
+        }
+
         // spawn progresivo
         spawnAccMs += dtMs;
         if (spawningEnabled) {
@@ -51,12 +55,20 @@ public class GameModel {
     }
 
     public void spawnFromNetwork(WalkerDTO dto, int screenW) {
+
         double x = dto.x;
-        if (dto.entrySide == WalkerDTO.Side.LEFT)  x = 20;
-        if (dto.entrySide == WalkerDTO.Side.RIGHT) x = screenW - 20;
+        if (x < 20) x = 20;
+        if (x > screenW - 40) x = screenW - 40;
+
 
         Walker w = new Walker(dto.id, x, dto.y, dto.vx, dto.vy, newWalkAnim(), newBoomAnim());
         walkers.add(w);
     }
+
+    //metodo de prueba:
+    public void spawnTest(int w, int h) {
+        walkers.add(new Walker(nextId++, w / 2.0, h / 2.0, newWalkAnim(), newBoomAnim(), 60));
+    }
+
 
 }
