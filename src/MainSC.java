@@ -8,6 +8,7 @@ public class MainSC {
         GameModel model = new GameModel(800, 500, true);
         GameView view = new GameView(model);
 
+        // UI + GameLoop siempre
         SwingUtilities.invokeLater(() -> {
             JFrame frame = new JFrame("SERVER (SC)");
             frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
@@ -23,28 +24,26 @@ public class MainSC {
         sc.bind(port);
         System.out.println("Server listening on " + port);
 
+        // Accept en thread (no bloquea UI)
         new Thread(() -> {
-            while (true) {
-                try {
-                    Channel ch = sc.accept();
-                    System.out.println("Client connected!");
+            try {
+                Channel ch = sc.accept();
+                System.out.println("Client connected!");
 
-                    // ✅ engancha channel + arranca reader dentro del attachChannel
-                    net.attachChannel(ch);
+                net.attachChannel(ch);
 
-                    // ✅ luego health
-                    net.startHealth();
+                // ✅ primero arrancamos el reader
+                ch.startReader(df -> net.onIncoming(df), ex -> {
+                    System.out.println("CH fail:");
+                    ex.printStackTrace();
+                });
 
-                } catch (Exception e) {
-                    System.out.println("Accept failed, retrying...");
-                    e.printStackTrace();
-                    sleep(1000);
-                }
+                // ✅ y DESPUÉS el health (evita reset)
+                net.startHealth();
+
+            } catch (Exception e) {
+                e.printStackTrace();
             }
         }, "SC-Acceptor").start();
-    }
-
-    private static void sleep(long ms) {
-        try { Thread.sleep(ms); } catch (InterruptedException ignored) {}
     }
 }

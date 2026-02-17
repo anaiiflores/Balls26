@@ -3,13 +3,14 @@ import javax.swing.*;
 public class MainCC {
     public static void main(String[] args) {
 
-        String host = "172.16.135.92";
+        String host = "192.168.1.211";
         int port = 51121;
 
         NetworkManager net = new NetworkManager();
         GameModel model = new GameModel(800, 500, false);
         GameView view = new GameView(model);
 
+        // UI + GameLoop siempre
         SwingUtilities.invokeLater(() -> {
             JFrame frame = new JFrame("CLIENT (CC)");
             frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
@@ -21,6 +22,7 @@ public class MainCC {
             new Thread(new GameController(model, view, net), "GameLoop").start();
         });
 
+        // Connect en thread con reintento
         new Thread(() -> {
             ClientConection cc = new ClientConection();
 
@@ -30,16 +32,15 @@ public class MainCC {
                     Channel ch = cc.connect(host, port);
                     System.out.println("Connected to server!");
 
-                    // 1) enganchar net al channel (setOnTransfer + attachHealth)
                     net.attachChannel(ch);
 
-                    // 2) arrancar reader (Channel lee MsgDTO y gestiona PING/PONG)
-                    ch.startReader(ex -> {
+                    // ✅ primero reader
+                    ch.startReader(df -> net.onIncoming(df), ex -> {
                         System.out.println("CH fail:");
                         ex.printStackTrace();
                     });
 
-                    // 3) arrancar health después
+                    // ✅ y DESPUÉS health
                     net.startHealth();
 
                     break;

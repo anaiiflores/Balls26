@@ -7,7 +7,7 @@ public class HealthTestChannel implements Runnable {
 
     private final AtomicLong lastPong = new AtomicLong(System.currentTimeMillis());
     private volatile boolean running = true;
-    private volatile boolean healthy = true;
+    private volatile boolean healthy = true; // ✅ estado interno
 
     public HealthTestChannel(Channel ch, long intervalMs) {
         this.ch = ch;
@@ -20,25 +20,31 @@ public class HealthTestChannel implements Runnable {
     }
 
     public boolean isHealthy() {
+        // ✅ ya NO cierra socket, solo informa estado
         long diff = System.currentTimeMillis() - lastPong.get();
         return ch.isOpen() && diff <= intervalMs * 5 && healthy;
     }
 
     @Override
     public void run() {
-        sleep(300);
+        sleep(300); // ✅ da tiempo a arrancar readers en ambos lados
 
         while (running && ch.isOpen()) {
             try {
-                ch.sendMsg(new MsgDTO(1, 0, null)); // PING
+                System.out.println("[HEALTH] send PING");
+                ch.send(new DataFrame(DataFrameType.PING, "health"));
             } catch (IOException e) {
+                System.out.println("[HEALTH] send failed (no cierro socket)");
                 healthy = false;
+                // no cierres: break
                 break;
             }
 
             long diff = System.currentTimeMillis() - lastPong.get();
             if (diff > intervalMs * 5) {
+                System.out.println("[HEALTH] no PONG (" + diff + "ms) -> unhealthy (no cierro socket)");
                 healthy = false;
+                // seguimos, por si se recupera
             }
 
             sleep(intervalMs);

@@ -1,71 +1,51 @@
 import java.io.*;
 import java.net.Socket;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.function.Consumer;
 
 public class Channel {
     private final Socket socket;
     private final ObjectOutputStream out;
     private final ObjectInputStream in;
 
-    private final AtomicBoolean readerStarted = new AtomicBoolean(false);
-
-    private HealthTestChannel health;
-    private Consumer<WalkerDTO> onTransfer;
-
     public Channel(Socket socket) throws IOException {
         this.socket = socket;
 
-        // SIEMPRE: OUT -> flush -> IN
+        // ✅ IMPORTANTE: primero OUT, flush, luego IN
         this.out = new ObjectOutputStream(socket.getOutputStream());
         this.out.flush();
-        this.in  = new ObjectInputStream(socket.getInputStream());
+        this.in = new ObjectInputStream(socket.getInputStream());
     }
 
-    public void setOnTransfer(Consumer<WalkerDTO> onTransfer) { this.onTransfer = onTransfer; }
-    public void attachHealth(HealthTestChannel health) { this.health = health; }
-
-    public synchronized void sendMsg(MsgDTO msg) throws IOException {
-        out.writeObject(msg);
+    public synchronized void send(Object obj) throws IOException {
+        out.writeObject(obj);
         out.flush();
-        out.reset();
+        out.reset(); // ✅ evita cache raro de objetos
     }
 
-    public boolean isOpen() {
-        return socket != null && socket.isConnected() && !socket.isClosed()
-                && !socket.isInputShutdown() && !socket.isOutputShutdown();
+    public Object receive() throws IOException, ClassNotFoundException {
+        return in.readObject();
     }
 
     public void close() {
-        try { in.close(); } catch (Exception ignored) {}
-        try { out.close(); } catch (Exception ignored) {}
         try { socket.close(); } catch (Exception ignored) {}
     }
 
-    private void process(MsgDTO msg) throws IOException {
-        switch (msg.code) {
-            case 0 -> { // TRANSFER
-                if (msg.hasObject == 1 && msg.payload instanceof WalkerDTO dto) {
-                    if (onTransfer != null) onTransfer.accept(dto);
-                }
-            }
-            case 1 -> sendMsg(new MsgDTO(2, 0, null)); // PING -> PONG
-            case 2 -> { if (health != null) health.notifyPong(); } // PONG
-        }
+    public boolean isOpen() {
+        return socket != null
+                && socket.isConnected()
+                && !socket.isClosed()
+                && !socket.isInputShutdown()
+                && !socket.isOutputShutdown();
     }
 
-    public void startReader(Consumer<Exception> onFail) {
-        if (!readerStarted.compareAndSet(false, true)) {
-            System.out.println("[CH] Reader already started. Ignoring.");
-            return;
-        }
+
+    public void startReader(java.util.function.Consumer<DataFrame> onMsg,
+                            java.util.function.Consumer<Exception> onFail) {
 
         Thread t = new Thread(() -> {
             try {
                 while (isOpen()) {
-                    Object obj = in.readObject(); // SOLO AQUÍ SE LEE
-                    if (obj instanceof MsgDTO msg) process(msg);
-                    else System.out.println("[CH] Unknown incoming: " + obj);
+                    Object obj = receive();
+                    if (obj instanceof DataFrame df) onMsg.accept(df);
                 }
             } catch (Exception ex) {
                 onFail.accept(ex);
@@ -74,7 +54,7 @@ public class Channel {
             }
         }, "CH-Reader");
 
-        t.setDaemon(false);
+        t.setDaemon(false); // ✅ que no muera “porque sí”
         t.start();
     }
 }
