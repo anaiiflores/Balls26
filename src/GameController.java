@@ -1,7 +1,8 @@
-
 import javax.swing.*;
+import java.util.List;
 
 public class GameController implements Runnable {
+
     private final GameModel model;
     private final GameView view;
     private final NetworkManager net;
@@ -26,20 +27,29 @@ public class GameController implements Runnable {
             int w = view.getWidth();
             int h = view.getHeight();
             if (w <= 0 || h <= 0) { sleep(10); continue; }
-            net.drainInbox(model, w,h);
 
+            // 1) ✅ aplicar lo que llegó por red (DTOs)
+            net.drainInbox(model, w, h);
+
+            // 2) ✅ actualizar el modelo (movimiento + explosiones + spawn local si toca)
             model.update(dt, w, h);
 
-            // revisar bordes y decidir: transferir (izq/der) o explotar (arriba/abajo)
-            for (Walker wk : model.getWalkers().toArray(new Walker[0])) {
+            // 3) ✅ usamos snapshot para iterar (NO lista real)
+            List<Walker> snapshot = model.snapshotWalkers();
+
+            // 4) revisar bordes y decidir: transferir o explotar
+            for (Walker wk : snapshot) {
+
                 if (wk.getState() != Walker.State.WALKING) continue;
 
                 Walker.Side side = wk.hitWhichSide(w, h);
                 if (side == Walker.Side.NONE) continue;
 
+                // Si sale por IZQ/DER => enviar al otro si hay conexión
                 if ((side == Walker.Side.LEFT || side == Walker.Side.RIGHT) && net.isConnected()) {
 
-                    if (wk.isTransferred()) continue;  // ✅ evita spam
+                    // evita spam: solo una vez
+                    if (wk.isTransferred()) continue;
                     wk.markTransferred();
 
                     WalkerDTO.Side entry = (side == Walker.Side.LEFT)
@@ -55,20 +65,29 @@ public class GameController implements Runnable {
                             entry
                     );
 
+                    // ✅ manda DTO
                     net.sendTransfer(dto);
+
+                    // ✅ quita del modelo local (ya no lo gestionas aquí)
                     model.removeById(wk.getId());
 
                 } else {
+                    // sale por ARRIBA/ABAJO o no hay conexión => explota aquí
+                    // (ojo: explota "en el modelo", wk viene del snapshot pero apunta al mismo objeto)
                     wk.explode();
                 }
-
-
             }
 
+            // 5) repintar UI en EDT
             SwingUtilities.invokeLater(view::repaint);
-            sleep(16);
+
+            sleep(16); // ~60 FPS
         }
     }
 
-    private void sleep(long ms) { try { Thread.sleep(ms); } catch (InterruptedException ignored) {} }
+    public void stop() { running = false; }
+
+    private void sleep(long ms) {
+        try { Thread.sleep(ms); } catch (InterruptedException ignored) {}
+    }
 }

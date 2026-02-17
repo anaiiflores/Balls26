@@ -12,21 +12,20 @@ public class GameView extends JPanel {
         setFocusable(true);
     }
 
-    @Override
 
+
+    @Override
     protected void paintComponent(Graphics g) {
         super.paintComponent(g);
 
-        java.util.List<Walker> snapshot = new java.util.ArrayList<>(model.getWalkers());
-
-        for (Walker w : snapshot) {
+        for (Walker w : model.snapshotWalkers()) {
             if (w.getState() != Walker.State.DEAD) {
                 g.drawImage(w.getImage(), w.getDrawX(), w.getDrawY(), null);
             }
         }
 
-        g.setColor(Color.DARK_GRAY);
-        g.drawString("Walkers: " + snapshot.size(), 10, 20);
+        g.drawString("Walkers: " + model.snapshotWalkers().size(), 10, 20);
     }
+
 
 }
