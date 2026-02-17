@@ -1,4 +1,3 @@
-
 import java.io.IOException;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -8,6 +7,7 @@ public class HealthTestChannel implements Runnable {
 
     private final AtomicLong lastPong = new AtomicLong(System.currentTimeMillis());
     private volatile boolean running = true;
+    private volatile boolean healthy = true;
 
     public HealthTestChannel(Channel ch, long intervalMs) {
         this.ch = ch;
@@ -16,26 +16,29 @@ public class HealthTestChannel implements Runnable {
 
     public void notifyPong() {
         lastPong.set(System.currentTimeMillis());
+        healthy = true;
     }
 
     public boolean isHealthy() {
-        return ch.isOpen() && (System.currentTimeMillis() - lastPong.get() <= intervalMs * 3);
+        long diff = System.currentTimeMillis() - lastPong.get();
+        return ch.isOpen() && diff <= intervalMs * 5 && healthy;
     }
 
     @Override
     public void run() {
+        sleep(300);
+
         while (running && ch.isOpen()) {
             try {
-                ch.send(new DataFrame(DataFrameType.PING, "health"));
+                ch.sendMsg(new MsgDTO(1, 0, null)); // PING
             } catch (IOException e) {
-                ch.close();
+                healthy = false;
                 break;
             }
 
-            long now = System.currentTimeMillis();
-            if (now - lastPong.get() > intervalMs * 3) {
-                ch.close();
-                break;
+            long diff = System.currentTimeMillis() - lastPong.get();
+            if (diff > intervalMs * 5) {
+                healthy = false;
             }
 
             sleep(intervalMs);

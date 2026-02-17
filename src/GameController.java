@@ -26,7 +26,7 @@ public class GameController implements Runnable {
             int w = view.getWidth();
             int h = view.getHeight();
             if (w <= 0 || h <= 0) { sleep(10); continue; }
-            net.drainInbox(model, w);
+            net.drainInbox(model, w,h);
 
             model.update(dt, w, h);
 
@@ -38,10 +38,14 @@ public class GameController implements Runnable {
                 if (side == Walker.Side.NONE) continue;
 
                 if ((side == Walker.Side.LEFT || side == Walker.Side.RIGHT) && net.isConnected()) {
-                    // transfer
-                    WalkerDTO.Side entry = (side == Walker.Side.LEFT) ? WalkerDTO.Side.RIGHT : WalkerDTO.Side.LEFT;
 
-                    // y: mantenemos altura, x se ajusta al entrar
+                    if (wk.isTransferred()) continue;  // ✅ evita spam
+                    wk.markTransferred();
+
+                    WalkerDTO.Side entry = (side == Walker.Side.LEFT)
+                            ? WalkerDTO.Side.RIGHT
+                            : WalkerDTO.Side.LEFT;
+
                     WalkerDTO dto = new WalkerDTO(
                             wk.getId(),
                             wk.getX(),
@@ -50,13 +54,15 @@ public class GameController implements Runnable {
                             wk.getVy(),
                             entry
                     );
+
                     net.sendTransfer(dto);
                     model.removeById(wk.getId());
 
                 } else {
-                    // si no hay conexión o es TOP/BOTTOM: explota
                     wk.explode();
                 }
+
+
             }
 
             SwingUtilities.invokeLater(view::repaint);

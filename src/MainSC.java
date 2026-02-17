@@ -1,27 +1,12 @@
-
 import javax.swing.*;
 
 public class MainSC {
     public static void main(String[] args) throws Exception {
         int port = 51121;
 
-        ServerConection sc = new ServerConection();
-        sc.bind(port);
-        System.out.println("Server listening on " + port);
-
-        Channel ch = sc.accept();
-        System.out.println("Client connected!");
-
         NetworkManager net = new NetworkManager();
-        net.attachChannel(ch);
-
-        GameModel model = new GameModel(800, 500,true);
+        GameModel model = new GameModel(800, 500, true);
         GameView view = new GameView(model);
-
-        ch.startReader(
-                df -> net.onIncoming(df),
-                ex -> System.out.println("CH fail: " + ex)
-        );
 
         SwingUtilities.invokeLater(() -> {
             JFrame frame = new JFrame("SERVER (SC)");
@@ -33,7 +18,33 @@ public class MainSC {
 
             new Thread(new GameController(model, view, net), "GameLoop").start();
         });
-        model.spawnTest(800, 500);
 
+        ServerConection sc = new ServerConection();
+        sc.bind(port);
+        System.out.println("Server listening on " + port);
+
+        new Thread(() -> {
+            while (true) {
+                try {
+                    Channel ch = sc.accept();
+                    System.out.println("Client connected!");
+
+                    // ✅ engancha channel + arranca reader dentro del attachChannel
+                    net.attachChannel(ch);
+
+                    // ✅ luego health
+                    net.startHealth();
+
+                } catch (Exception e) {
+                    System.out.println("Accept failed, retrying...");
+                    e.printStackTrace();
+                    sleep(1000);
+                }
+            }
+        }, "SC-Acceptor").start();
+    }
+
+    private static void sleep(long ms) {
+        try { Thread.sleep(ms); } catch (InterruptedException ignored) {}
     }
 }

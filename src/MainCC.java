@@ -3,16 +3,13 @@ import javax.swing.*;
 public class MainCC {
     public static void main(String[] args) {
 
-        String host = "172.16.141.73";
+        String host = "172.16.135.92";
         int port = 51121;
 
         NetworkManager net = new NetworkManager();
-
-        // Cliente: NO spawnea
         GameModel model = new GameModel(800, 500, false);
         GameView view = new GameView(model);
 
-        // 1) UI primero (siempre)
         SwingUtilities.invokeLater(() -> {
             JFrame frame = new JFrame("CLIENT (CC)");
             frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
@@ -24,7 +21,6 @@ public class MainCC {
             new Thread(new GameController(model, view, net), "GameLoop").start();
         });
 
-        // 2) Conector en thread aparte (no bloquea UI)
         new Thread(() -> {
             ClientConection cc = new ClientConection();
 
@@ -34,17 +30,20 @@ public class MainCC {
                     Channel ch = cc.connect(host, port);
                     System.out.println("Connected to server!");
 
+                    // 1) enganchar net al channel (setOnTransfer + attachHealth)
                     net.attachChannel(ch);
 
-                    ch.startReader(
-                            df -> net.onIncoming(df),
-                            ex -> {
-                                System.out.println("CH fail:");
-                                ex.printStackTrace();
-                            }
-                    );
+                    // 2) arrancar reader (Channel lee MsgDTO y gestiona PING/PONG)
+                    ch.startReader(ex -> {
+                        System.out.println("CH fail:");
+                        ex.printStackTrace();
+                    });
 
-                    break; // conectado -> salimos del bucle
+                    // 3) arrancar health después
+                    net.startHealth();
+
+                    break;
+
                 } catch (Exception e) {
                     System.out.println("Connect failed, retrying in 1s...");
                     sleep(1000);
@@ -54,7 +53,6 @@ public class MainCC {
     }
 
     private static void sleep(long ms) {
-        try { Thread.sleep(ms); }
-        catch (InterruptedException ignored) {}
+        try { Thread.sleep(ms); } catch (InterruptedException ignored) {}
     }
 }

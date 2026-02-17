@@ -12,6 +12,7 @@ public class Walker {
     private final Animation walkAnim;
     private final Animation explosionAnim;
     private State state = State.WALKING;
+    private boolean transferred = false;
 
     private long explosionHoldMs = 0;
 
@@ -90,4 +91,6 @@ public class Walker {
     public State getState() { return state; }
 
     public void setX(double x) { this.x = x; }
+    public boolean isTransferred() { return transferred; }
+    public void markTransferred() { transferred = true; }
 }
