@@ -1,5 +1,5 @@
+
 import javax.swing.*;
-import java.util.List;
 
 public class GameController implements Runnable {
 
@@ -7,7 +7,6 @@ public class GameController implements Runnable {
     private final GameView view;
     private final NetworkManager net;
 
-    private volatile boolean running = true;
 
     public GameController(GameModel model, GameView view, NetworkManager net) {
         this.model = model;
@@ -19,7 +18,7 @@ public class GameController implements Runnable {
     public void run() {
         long last = System.currentTimeMillis();
 
-        while (running) {
+        while (true) {
             long now = System.currentTimeMillis();
             long dt = now - last;
             last = now;
@@ -28,64 +27,44 @@ public class GameController implements Runnable {
             int h = view.getHeight();
             if (w <= 0 || h <= 0) { sleep(10); continue; }
 
-            // 1) ✅ aplicar lo que llegó por red (DTOs)
+            // 1) lo recibido por red entra al modelo
             net.drainInbox(model, w, h);
 
-            // 2) ✅ actualizar el modelo (movimiento + explosiones + spawn local si toca)
+            // 2) actualiza walkers
             model.update(dt, w, h);
 
-            // 3) ✅ usamos snapshot para iterar (NO lista real)
-            List<Walker> snapshot = model.snapshotWalkers();
-
-            // 4) revisar bordes y decidir: transferir o explotar
-            for (Walker wk : snapshot) {
-
+            // 3) si sale por LEFT o RIGHT, lo mando y lo elimino local
+            for (Walker wk : model.snapshotWalkers()) {
                 if (wk.getState() != Walker.State.WALKING) continue;
 
                 Walker.Side side = wk.hitWhichSide(w, h);
-                if (side == Walker.Side.NONE) continue;
+                if (side == Walker.Side.LEFT || side == Walker.Side.RIGHT) {
 
-                // Si sale por IZQ/DER => enviar al otro si hay conexión
-                if ((side == Walker.Side.LEFT || side == Walker.Side.RIGHT) && net.isConnected()) {
-
-                    // evita spam: solo una vez
+                    if (!net.isConnected()) continue;
                     if (wk.isTransferred()) continue;
+
                     wk.markTransferred();
 
                     WalkerDTO.Side entry = (side == Walker.Side.LEFT)
                             ? WalkerDTO.Side.RIGHT
                             : WalkerDTO.Side.LEFT;
 
-                    WalkerDTO dto = new WalkerDTO(
-                            wk.getId(),
-                            wk.getX(),
-                            wk.getY(),
-                            wk.getVx(),
-                            wk.getVy(),
-                            entry
-                    );
+                    double yNorm = wk.getY() / (double) h;
+                    yNorm = Math.max(0.0, Math.min(1.0, yNorm));
 
-                    // ✅ manda DTO
+                    WalkerDTO dto = new WalkerDTO(wk.getId(), yNorm, wk.getVx(), wk.getVy(), entry);
+
                     net.sendTransfer(dto);
-
-                    // ✅ quita del modelo local (ya no lo gestionas aquí)
+                    wk.markTransferred();
                     model.removeById(wk.getId());
 
-                } else {
-                    // sale por ARRIBA/ABAJO o no hay conexión => explota aquí
-                    // (ojo: explota "en el modelo", wk viene del snapshot pero apunta al mismo objeto)
-                    wk.explode();
                 }
             }
 
-            // 5) repintar UI en EDT
             SwingUtilities.invokeLater(view::repaint);
-
-            sleep(16); // ~60 FPS
+            sleep(16);
         }
     }
-
-    public void stop() { running = false; }
 
     private void sleep(long ms) {
         try { Thread.sleep(ms); } catch (InterruptedException ignored) {}

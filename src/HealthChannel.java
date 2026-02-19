@@ -1,7 +1,9 @@
+
+
 import java.io.IOException;
 import java.util.concurrent.atomic.AtomicLong;
 
-public class HealthTestChannel implements Runnable {
+public class HealthChannel implements Runnable {
 
     private final Channel ch;
     private final long intervalMs;
@@ -9,11 +11,7 @@ public class HealthTestChannel implements Runnable {
     private final AtomicLong lastPong = new AtomicLong(System.currentTimeMillis());
     private volatile boolean running = true;
 
-    public HealthTestChannel(Channel ch) {
-        this(ch, 1000);
-    }
-
-    public HealthTestChannel(Channel ch, long intervalMs) {
+    public HealthChannel(Channel ch, long intervalMs) {
         this.ch = ch;
         this.intervalMs = intervalMs;
     }
@@ -23,26 +21,35 @@ public class HealthTestChannel implements Runnable {
     }
 
     public boolean isHealthy() {
-        return ch.isOpen() &&
-                (System.currentTimeMillis() - lastPong.get()) <= intervalMs * 5;
+        long diff = System.currentTimeMillis() - lastPong.get();
+        return ch.isOpen() && diff <= intervalMs * 5;
+    }
+
+    public void stop() {
+        running = false;
     }
 
     @Override
     public void run() {
-        sleep(300); // deja arrancar reader
+        sleep(300); // deja arrancar el reader
 
         while (running && ch.isOpen()) {
             try {
-                ch.send(new DataFrame(DataFrameType.PING, null));
+                ch.send(new MsgDTO(1, 0, null)); // PING
             } catch (IOException e) {
+                break;
+            }
+
+            // si pasan muchos intervalos sin PONG, cerramos para forzar reconexión
+            if (!isHealthy()) {
+                System.out.println("[HEALTH] timeout -> closing channel");
+                ch.close();
                 break;
             }
 
             sleep(intervalMs);
         }
     }
-
-    public void stop() { running = false; }
 
     private void sleep(long ms) {
         try { Thread.sleep(ms); } catch (InterruptedException ignored) {}

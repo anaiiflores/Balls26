@@ -1,10 +1,9 @@
+
 import java.awt.image.BufferedImage;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
 
 public class GameModel {
 
-    // ✅ Lista interna (NO la exponemos directamente)
     private final List<Walker> walkers = new ArrayList<>();
 
     private final BufferedImage walkSheet;
@@ -26,13 +25,7 @@ public class GameModel {
     private Animation newWalkAnim() { return new Animation(walkSheet, 48, 48, 4, 140); }
     private Animation newBoomAnim() { return new Animation(boomSheet, 64, 64, 6, 180); }
 
-    /**
-     * ✅ Update del juego (lo llama el GameController cada tick)
-     * synchronized para que no choque con spawnFromNetwork/removeById/etc.
-     */
     public synchronized void update(long dtMs, int w, int h) {
-
-        // Spawn local si toca
         if (spawningEnabled) {
             spawnAccMs += dtMs;
             if (spawnAccMs >= spawnEveryMs && walkers.size() < maxWalkers) {
@@ -41,45 +34,44 @@ public class GameModel {
             }
         }
 
-        // Actualizar walkers y limpiar muertos
         for (Walker wk : walkers) wk.update(dtMs, w, h);
         walkers.removeIf(wk -> wk.getState() == Walker.State.DEAD);
     }
 
-    /**
-     * ✅ Esto es CLAVE para MVC + Threads:
-     * Devuelve una copia para iterar/pintar sin petar.
-     */
-    public synchronized List<Walker> snapshotWalkers() {
+    public synchronized java.util.List<Walker> snapshotWalkers() {
         return new ArrayList<>(walkers);
     }
 
-    /**
-     * ✅ Si necesitas buscar/borrar por id desde el controller
-     */
     public synchronized void removeById(int id) {
         walkers.removeIf(w -> w.getId() == id);
     }
 
-    /**
-     * ✅ Cuando llega un DTO desde red, recreamos el walker aquí.
-     * synchronized para evitar líos con update/pintado.
-     */
-    public synchronized void spawnFromNetwork(WalkerDTO dto, int screenW, int screenH) {
-        double x = (dto.entrySide == WalkerDTO.Side.LEFT) ? 20 : (screenW - 20);
+    public void spawnFromNetwork(WalkerDTO dto, int screenW, int screenH) {
 
-        double y = dto.y;
+        // X depende del lado por el que entra
+        double x = (dto.entrySide == WalkerDTO.Side.LEFT)
+                ? 20
+                : screenW - 20;
+
+        // 🔥 Convertimos yNorm (0..1) a píxeles reales
+        double y = dto.yNorm * screenH;
+
+        // clamp por seguridad
         if (y < 20) y = 20;
         if (y > screenH - 40) y = screenH - 40;
 
-        Walker w = new Walker(dto.id, x, y, dto.vx, dto.vy, newWalkAnim(), newBoomAnim());
+        Walker w = new Walker(
+                dto.id,
+                x,
+                y,
+                dto.vx,
+                dto.vy,
+                newWalkAnim(),
+                newBoomAnim()
+        );
+
         walkers.add(w);
     }
 
-    /**
-     * ✅ Spawn manual de prueba (local)
-     */
-    public synchronized void spawnTest(int w, int h) {
-        walkers.add(new Walker(nextId++, w / 2.0, h / 2.0, newWalkAnim(), newBoomAnim(), 60));
-    }
+
 }
